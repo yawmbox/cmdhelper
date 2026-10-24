@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""
+CMDHELPER - Interactive CLI/TUI Command Helper for MX-Linux / SSH
+"""
+
+import sys
+import argparse
+from cmdhelper_app.db import CommandDatabase, get_commands_file_path
+from cmdhelper_app.tui import launch_tui
+
+
+def cli_list(db: CommandDatabase):
+    commands = db.commands
+    print(f"\n\033[1;36mCMDHELPER - Elenco Comandi Salvati ({len(commands)} comandi in {get_commands_file_path()})\033[0m\n")
+
+    categories = db.get_categories()
+    for cat in categories:
+        if cat == "Tutti i comandi":
+            continue
+        cat_cmds = [c for c in commands if c.get("category") == cat]
+        if not cat_cmds:
+            continue
+        print(f"\033[1;33m--- {cat} ({len(cat_cmds)}) ---\033[0m")
+        for cmd in cat_cmds:
+            print(f"  \033[1;32m• {cmd.get('title')}\033[0m")
+            print(f"    \033[1;37m$ {cmd.get('command')}\033[0m")
+            if cmd.get('description'):
+                print(f"    \033[0;36m  {cmd.get('description')}\033[0m")
+        print()
+
+
+def cli_search(db: CommandDatabase, query: str):
+    results = db.filter(query=query)
+    print(f"\n\033[1;36mRisultati di ricerca per: '{query}' ({len(results)} trovati)\033[0m\n")
+    if not results:
+        print("  Nessun comando corrispondente trovato.")
+        return
+
+    for cmd in results:
+        print(f"  \033[1;33m[{cmd.get('category')}]\033[0m \033[1;32m{cmd.get('title')}\033[0m")
+        print(f"  \033[1;37m$ {cmd.get('command')}\033[0m")
+        if cmd.get('description'):
+            print(f"    \033[0;36m{cmd.get('description')}\033[0m")
+        print()
+
+
+def cli_add(db: CommandDatabase, args):
+    new_cmd = db.add_command(
+        title=args.title,
+        category=args.category or "Custom",
+        command_str=args.command,
+        description=args.description or "",
+        tags=[t.strip() for t in args.tags.split(",")] if args.tags else []
+    )
+    print(f"\033[1;32mComando aggiunto con successo!\033[0m")
+    print(f"  Titolo:    {new_cmd['title']}")
+    print(f"  Categoria: {new_cmd['category']}")
+    print(f"  Comando:   {new_cmd['command']}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="cmdhelper",
+        description="CMDHELPER: Assistente interattivo per la memoria dei comandi shell su MX-Linux / SSH."
+    )
+    subparsers = parser.add_subparsers(dest="subcommand", help="Sotto-comandi disponibili")
+
+    # Search subcommand
+    search_parser = subparsers.add_parser("search", help="Cerca comandi da riga di comando")
+    search_parser.add_argument("query", help="Termine di ricerca")
+
+    # List subcommand
+    subparsers.add_parser("list", help="Elenca tutti i comandi salvati divisi per categoria")
+
+    # Add subcommand
+    add_parser = subparsers.add_parser("add", help="Aggiungi un nuovo comando personalizzato")
+    add_parser.add_argument("-t", "--title", required=True, help="Titolo del comando")
+    add_parser.add_argument("-c", "--command", required=True, help="Sintassi del comando shell (usa {param} per segnaposto)")
+    add_parser.add_argument("-cat", "--category", default="Custom", help="Categoria del comando")
+    add_parser.add_argument("-d", "--description", default="", help="Descrizione opzionale")
+    add_parser.add_argument("--tags", default="", help="Tag separati da virgola")
+
+    args = parser.parse_args()
+    db = CommandDatabase()
+
+    if args.subcommand == "search":
+        cli_search(db, args.query)
+    elif args.subcommand == "list":
+        cli_list(db)
+    elif args.subcommand == "add":
+        cli_add(db, args)
+    else:
+        # Launch TUI by default
+        launch_tui()
+
+
+if __name__ == "__main__":
+    main()
